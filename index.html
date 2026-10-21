@@ -1,0 +1,604 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Mall Customer Segments</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: lab-notebook page. Live cluster plot + control panel up top, then elbow evidence, segments, predictor, theory, raw data. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --fg: #17212c;
+  --muted: #5a6776;
+  --line: #d9dfe6;
+  --accent: #0d7068;
+  --accent-soft: #e0f0ee;
+  --c0: #e4572e; --c1: #f0a030; --c2: #8e5cc4; --c3: #2e9e5b; --c4: #2a7fb0;
+  --c5: #d6488c; --c6: #16a3b5; --c7: #8a9a2c; --c8: #a0583a; --c9: #5865c4;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --region-alpha: 0.13;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1318; --surface: #151c23; --fg: #e5eaef; --muted: #94a1ae; --line: #27313b;
+    --accent: #3cc7b6; --accent-soft: #15302d; --region-alpha: 0.17; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1318; --surface: #151c23; --fg: #e5eaef; --muted: #94a1ae; --line: #27313b;
+  --accent: #3cc7b6; --accent-soft: #15302d; --region-alpha: 0.17; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1140px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 44px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 24px; font-weight: 700; }
+h3 { font-size: 17px; font-weight: 500; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+section { display: grid; gap: 16px; }
+.section-head { display: grid; gap: 6px; max-width: 68ch; }
+
+header { display: grid; gap: 12px; }
+header .lede { max-width: 66ch; font-size: 16.5px; color: var(--muted); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.facts b { color: var(--fg); font-weight: 500; }
+
+/* Hero: plot + panel */
+.lab { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 16px; min-width: 0; }
+.plot-box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 10px 4px; min-width: 0; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+svg .axis-title { font-family: var(--body); font-size: 12px; fill: var(--fg); }
+svg .grid { stroke: var(--line); stroke-width: 1; }
+.pt { stroke: var(--surface); stroke-width: 1; transition: fill .45s ease; }
+.cent { transition: transform .6s cubic-bezier(.3,.7,.3,1); }
+.cent .halo { stroke: var(--fg); stroke-width: 6; stroke-linecap: round; fill: none; }
+.cent .core { stroke-width: 3; stroke-linecap: round; fill: none; }
+
+.label { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.kgroup { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; }
+.kbtn { font: 500 14px var(--mono); padding: 7px 0; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+.kbtn:hover { border-color: var(--accent); }
+.kbtn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat { display: grid; gap: 2px; padding: 10px 12px; background: var(--bg); border-radius: 8px; }
+.stat .v { font-family: var(--mono); font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat .hint { font-size: 12px; color: var(--muted); }
+
+.run { display: grid; gap: 8px; }
+.btn { font: 600 14px var(--body); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-row .btn { flex: 1 1 140px; }
+.phase { font-family: var(--mono); font-size: 13px; min-height: 2.6em; padding: 8px 10px; border-radius: 6px; background: var(--accent-soft); color: var(--fg); }
+
+.legend { display: grid; gap: 6px; }
+.legend-row { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; font-size: 13.5px; }
+.chip { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+/* Elbow */
+.evidence { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 8px; display: grid; gap: 6px; min-width: 0; }
+.chart .kpt { cursor: pointer; }
+.chart .kpt:hover circle { stroke-width: 3; }
+.note { max-width: 70ch; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 8px 8px 0; }
+
+/* Tables */
+.table-box { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--surface); }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.idea { white-space: normal; min-width: 220px; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+.seg { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; }
+.data-box { max-height: 380px; overflow: auto; }
+
+/* Predictor */
+.predict { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.field { display: grid; gap: 6px; }
+.field-top { display: flex; justify-content: space-between; align-items: baseline; }
+.field output { font-family: var(--mono); font-size: 18px; font-weight: 500; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.verdict { display: grid; gap: 8px; align-content: start; }
+.verdict .name { font-family: var(--display); font-size: 26px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.verdict .name .chip { width: 16px; height: 16px; }
+
+/* Theory */
+.theory { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 10px; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 28px 1fr; gap: 10px; }
+ol.steps li::before { content: counter(s); font-family: var(--mono); font-size: 13px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent); display: grid; place-items: center; }
+.formula { font-family: var(--mono); font-size: 15px; padding: 10px 12px; background: var(--bg); border-radius: 6px; }
+.tag { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 860px) {
+  .lab, .evidence, .predict, .theory { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 420px) {
+  .kgroup { grid-template-columns: repeat(5, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pt, .cent { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">ML Mini Project · Unit 3 · Mixture Models and EM</span>
+    <h1>Mall Customer Segments with K-Means</h1>
+    <p class="lede">K-Means clustering groups 200 mall customers by annual income and spending score, so the mall can market differently to each group. Everything on this page runs live in your browser on the real dataset.</p>
+    <div class="facts">
+      <span>Dataset <b>Mall_Customers.csv</b></span>
+      <span>Rows <b>200</b></span>
+      <span>Features <b>Annual Income (k$), Spending Score (1–100)</b></span>
+      <span>Algorithm <b>K-Means, k-means++ init, 10 restarts</b></span>
+    </div>
+  </header>
+
+  <section aria-labelledby="lab-h">
+    <div class="section-head">
+      <span class="eyebrow">Live model</span>
+      <h2 id="lab-h">Clusters</h2>
+      <p class="muted">Pick a value of K to re-cluster. The shaded areas show which centroid is closest at each point, and the ✕ marks are the centroids. Press "Watch it run" to see the algorithm work one step at a time.</p>
+    </div>
+    <div class="lab">
+      <div class="plot-box"><svg id="plot" viewBox="0 0 600 420" role="img" aria-label="Scatter plot of customers coloured by cluster"></svg></div>
+      <div class="panel">
+        <div class="field">
+          <span class="label">Number of clusters (K)</span>
+          <div class="kgroup" id="kgroup"></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><span class="label">WCSS</span><span class="v" id="s-wcss">–</span><span class="hint">lower = tighter clusters</span></div>
+          <div class="stat"><span class="label">Silhouette</span><span class="v" id="s-sil">–</span><span class="hint">−1 to 1, higher = better</span></div>
+        </div>
+        <div class="run">
+          <span class="label">Step-by-step</span>
+          <div class="btn-row">
+            <button class="btn" id="watch">Watch it run</button>
+            <button class="btn ghost" id="best">Show best fit</button>
+          </div>
+          <div class="phase" id="phase">Showing the best of 10 k-means++ runs.</div>
+        </div>
+        <div class="field">
+          <span class="label">Segments</span>
+          <div class="legend" id="legend"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="elbow-h">
+    <div class="section-head">
+      <span class="eyebrow">Choosing K</span>
+      <h2 id="elbow-h">Elbow method and silhouette score</h2>
+      <p class="muted">The model was trained for every K from 1 to 10. Click a point on either chart to load that K above.</p>
+    </div>
+    <div class="evidence">
+      <div class="chart"><h3>WCSS (inertia) vs K</h3><svg id="elbow" viewBox="0 0 340 220"></svg></div>
+      <div class="chart"><h3>Silhouette score vs K</h3><svg id="silch" viewBox="0 0 340 220"></svg></div>
+    </div>
+    <p class="note" id="elbow-note"></p>
+  </section>
+
+  <section aria-labelledby="seg-h">
+    <div class="section-head">
+      <span class="eyebrow">Results</span>
+      <h2 id="seg-h">Segment profiles</h2>
+      <p class="muted" id="seg-sub"></p>
+    </div>
+    <div class="table-box">
+      <table>
+        <thead><tr><th>Segment</th><th class="num">Customers</th><th class="num">Avg age</th><th class="num">Avg income (k$)</th><th class="num">Avg spending</th><th class="num">Female %</th><th>Marketing idea</th></tr></thead>
+        <tbody id="profile"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="pred-h">
+    <div class="section-head">
+      <span class="eyebrow">Use the model</span>
+      <h2 id="pred-h">Predict a new customer's segment</h2>
+      <p class="muted">Move the sliders. The new customer is assigned to the nearest centroid and shown as a ring on the plot above.</p>
+    </div>
+    <div class="predict panel">
+      <div style="display:grid;gap:18px">
+        <div class="field">
+          <div class="field-top"><label class="label" for="p-inc">Annual income (k$)</label><output id="o-inc" for="p-inc">60</output></div>
+          <input type="range" id="p-inc" min="10" max="140" value="60">
+        </div>
+        <div class="field">
+          <div class="field-top"><label class="label" for="p-sc">Spending score (1–100)</label><output id="o-sc" for="p-sc">50</output></div>
+          <input type="range" id="p-sc" min="1" max="100" value="50">
+        </div>
+      </div>
+      <div class="verdict" aria-live="polite">
+        <span class="label">Predicted segment</span>
+        <div class="name" id="v-name"></div>
+        <p class="muted" id="v-detail"></p>
+        <p id="v-idea"></p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="th-h">
+    <div class="section-head">
+      <span class="eyebrow">Theory</span>
+      <h2 id="th-h">How K-Means works</h2>
+    </div>
+    <div class="theory">
+      <div class="panel">
+        <ol class="steps">
+          <li><span>Choose <b>K</b>, the number of clusters.</span></li>
+          <li><span>Place K starting <b>centroids</b>. k-means++ picks them spread apart, which gives better results than a purely random start.</span></li>
+          <li><span><b>Assignment step</b> <span class="tag">E-step</span>: give every customer to its nearest centroid, using Euclidean distance.</span></li>
+          <li><span><b>Update step</b> <span class="tag">M-step</span>: move each centroid to the mean of the customers assigned to it.</span></li>
+          <li><span>Repeat steps 3 and 4 until no customer changes cluster.</span></li>
+        </ol>
+        <div class="formula">WCSS = Σ<sub>k</sub> Σ<sub>x ∈ C<sub>k</sub></sub> ‖x − μ<sub>k</sub>‖²</div>
+        <p class="muted">K-Means minimises WCSS. Each run can stop at a local minimum, so the model is trained 10 times from different starts and the run with the lowest WCSS is kept.</p>
+      </div>
+      <div class="panel">
+        <h3>Link to EM and Gaussian mixtures</h3>
+        <p>K-Means is a "hard" special case of the EM algorithm for a mixture of Gaussians.</p>
+        <div class="table-box" style="border:0">
+          <table>
+            <thead><tr><th></th><th>K-Means</th><th>Gaussian mixture (EM)</th></tr></thead>
+            <tbody>
+              <tr><td>Assignment</td><td>Hard: one cluster per point</td><td>Soft: a probability for each cluster</td></tr>
+              <tr><td>E-step</td><td>Nearest centroid</td><td>Responsibilities γ(z<sub>nk</sub>)</td></tr>
+              <tr><td>M-step</td><td>Centroid = mean</td><td>Update μ, Σ and mixing weights π</td></tr>
+              <tr><td>Cluster shape</td><td>Round, similar size</td><td>Elliptical, any size</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">Limitations of K-Means: K must be chosen in advance, results depend on the starting centroids, it is sensitive to outliers, and it only works on numeric features.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="data-h">
+    <div class="section-head">
+      <span class="eyebrow">Dataset</span>
+      <h2 id="data-h">All 200 customers</h2>
+      <p class="muted">Each row shows the segment the current model assigned.</p>
+    </div>
+    <div class="table-box data-box">
+      <table>
+        <thead><tr><th class="num">ID</th><th>Gender</th><th class="num">Age</th><th class="num">Income (k$)</th><th class="num">Spending</th><th>Segment</th></tr></thead>
+        <tbody id="data"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Built with Python (pandas, scikit-learn, matplotlib) in the Colab notebook. This page re-implements the same K-Means in plain JavaScript so it can run in the browser.</footer>
+</div>
+
+<script>
+// [isMale, age, income k$, spending score]
+const RAW = [[1,19,15,39],[1,21,15,81],[0,20,16,6],[0,23,16,77],[0,31,17,40],[0,22,17,76],[0,35,18,6],[0,23,18,94],[1,64,19,3],[0,30,19,72],[1,67,19,14],[0,35,19,99],[0,58,20,15],[0,24,20,77],[1,37,20,13],[1,22,20,79],[0,35,21,35],[1,20,21,66],[1,52,23,29],[0,35,23,98],[1,35,24,35],[1,25,24,73],[0,46,25,5],[1,31,25,73],[0,54,28,14],[1,29,28,82],[0,45,28,32],[1,35,28,61],[0,40,29,31],[0,23,29,87],[1,60,30,4],[0,21,30,73],[1,53,33,4],[1,18,33,92],[0,49,33,14],[0,21,33,81],[0,42,34,17],[0,30,34,73],[0,36,37,26],[0,20,37,75],[0,65,38,35],[1,24,38,92],[1,48,39,36],[0,31,39,61],[0,49,39,28],[0,24,39,65],[0,50,40,55],[0,27,40,47],[0,29,40,42],[0,31,40,42],[0,49,42,52],[1,33,42,60],[0,31,43,54],[1,59,43,60],[0,50,43,45],[1,47,43,41],[0,51,44,50],[1,69,44,46],[0,27,46,51],[1,53,46,46],[1,70,46,56],[1,19,46,55],[0,67,47,52],[0,54,47,59],[1,63,48,51],[1,18,48,59],[0,43,48,50],[0,68,48,48],[1,19,48,59],[0,32,48,47],[1,70,49,55],[0,47,49,42],[0,60,50,49],[0,60,50,56],[1,59,54,47],[1,26,54,54],[0,45,54,53],[1,40,54,48],[0,23,54,52],[0,49,54,42],[1,57,54,51],[1,38,54,55],[1,67,54,41],[0,46,54,44],[0,21,54,57],[1,48,54,46],[0,55,57,58],[0,22,57,55],[0,34,58,60],[0,50,58,46],[0,68,59,55],[1,18,59,41],[1,48,60,49],[0,40,60,40],[0,32,60,42],[1,24,60,52],[0,47,60,47],[0,27,60,50],[1,48,61,42],[1,20,61,49],[0,23,62,41],[0,49,62,48],[1,67,62,59],[1,26,62,55],[1,49,62,56],[0,21,62,42],[0,66,63,50],[1,54,63,46],[1,68,63,43],[1,66,63,48],[1,65,63,52],[0,19,63,54],[0,38,64,42],[1,19,64,46],[0,18,65,48],[0,19,65,50],[0,63,65,43],[0,49,65,59],[0,51,67,43],[0,50,67,57],[1,27,67,56],[0,38,67,40],[0,40,69,58],[1,39,69,91],[0,23,70,29],[0,31,70,77],[1,43,71,35],[1,40,71,95],[1,59,71,11],[1,38,71,75],[1,47,71,9],[1,39,71,75],[0,25,72,34],[0,31,72,71],[1,20,73,5],[0,29,73,88],[0,44,73,7],[1,32,73,73],[1,19,74,10],[0,35,74,72],[0,57,75,5],[1,32,75,93],[0,28,76,40],[0,32,76,87],[1,25,77,12],[1,28,77,97],[1,48,77,36],[0,32,77,74],[0,34,78,22],[1,34,78,90],[1,43,78,17],[1,39,78,88],[0,44,78,20],[0,38,78,76],[0,47,78,16],[0,27,78,89],[1,37,78,1],[0,30,78,78],[1,34,78,1],[0,30,78,73],[0,56,79,35],[0,29,79,83],[1,19,81,5],[0,31,81,93],[1,50,85,26],[0,36,85,75],[1,42,86,20],[0,33,86,95],[0,36,87,27],[1,32,87,63],[1,40,87,13],[1,28,87,75],[1,36,87,10],[1,36,87,92],[0,52,88,13],[0,30,88,86],[1,58,88,15],[1,27,88,69],[1,59,93,14],[1,35,93,90],[0,37,97,32],[0,32,97,86],[1,46,98,15],[0,29,98,88],[0,41,99,39],[1,30,99,97],[0,54,101,24],[1,28,101,68],[0,41,103,17],[0,36,103,85],[0,34,103,23],[0,32,103,69],[1,33,113,8],[0,38,113,91],[0,47,120,16],[0,35,120,79],[0,45,126,28],[1,32,126,74],[1,32,137,18],[1,30,137,83]];
+const X = RAW.map(r => [r[2], r[3]]);
+const N = X.length;
+const KMAX = 10;
+
+// ---------- K-Means ----------
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const d2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+function nearest(p, C) { let b = 0, bd = Infinity; for (let j = 0; j < C.length; j++) { const d = d2(p, C[j]); if (d < bd) { bd = d; b = j; } } return b; }
+
+function initPlusPlus(k, rand) {
+  const first = Math.floor(rand() * N);
+  const C = [X[first].slice()];
+  const D = X.map(p => d2(p, C[0]));
+  while (C.length < k) {
+    let r = rand() * D.reduce((a, b) => a + b, 0), i = 0;
+    for (; i < N - 1; i++) { r -= D[i]; if (r <= 0) break; }
+    C.push(X[i].slice());
+    for (let j = 0; j < N; j++) D[j] = Math.min(D[j], d2(X[j], X[i]));
+  }
+  return C;
+}
+function initRandom(k, rand) {
+  const idx = new Set();
+  while (idx.size < k) idx.add(Math.floor(rand() * N));
+  return [...idx].map(i => X[i].slice());
+}
+function lloyd(C, record) {
+  const k = C.length;
+  let labels = new Array(N).fill(-1);
+  const hist = [];
+  let iters = 0;
+  for (let it = 0; it < 100; it++) {
+    const next = X.map(p => nearest(p, C));
+    const changed = next.some((l, i) => l !== labels[i]);
+    labels = next;
+    if (record) hist.push({ phase: "assign", it: it + 1, C: C.map(c => c.slice()), labels: labels.slice(), changed });
+    if (!changed) break;
+    const S = Array.from({ length: k }, () => [0, 0, 0]);
+    X.forEach((p, i) => { const s = S[labels[i]]; s[0] += p[0]; s[1] += p[1]; s[2]++; });
+    C = C.map((c, j) => S[j][2] ? [S[j][0] / S[j][2], S[j][1] / S[j][2]] : c);
+    iters = it + 1;
+    if (record) hist.push({ phase: "update", it: it + 1, C: C.map(c => c.slice()), labels: labels.slice() });
+  }
+  const wcss = X.reduce((a, p, i) => a + d2(p, C[labels[i]]), 0);
+  return { C, labels, wcss, iters, hist };
+}
+// Stable cluster order (by income, then score) so colours don't jump around.
+function sortModel(m) {
+  const order = m.C.map((c, j) => j).sort((a, b) => m.C[a][0] - m.C[b][0] || m.C[a][1] - m.C[b][1]);
+  const inv = []; order.forEach((j, newIdx) => inv[j] = newIdx);
+  return { ...m, C: order.map(j => m.C[j]), labels: m.labels.map(l => inv[l]) };
+}
+function fit(k) {
+  let best = null;
+  for (let s = 0; s < 10; s++) {
+    const m = lloyd(initPlusPlus(k, mulberry32(42 + s * 7919)), false);
+    if (!best || m.wcss < best.wcss - 1e-9) best = m;
+  }
+  return sortModel(best);
+}
+
+const DM = new Float64Array(N * N);
+for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) DM[i * N + j] = Math.sqrt(d2(X[i], X[j]));
+function silhouette(labels, k) {
+  if (k < 2) return null;
+  const cnt = new Array(k).fill(0);
+  labels.forEach(l => cnt[l]++);
+  let tot = 0;
+  for (let i = 0; i < N; i++) {
+    const sums = new Array(k).fill(0);
+    for (let j = 0; j < N; j++) if (j !== i) sums[labels[j]] += DM[i * N + j];
+    const li = labels[i];
+    if (cnt[li] <= 1) continue;
+    const a = sums[li] / (cnt[li] - 1);
+    let b = Infinity;
+    for (let c = 0; c < k; c++) if (c !== li && cnt[c] > 0) b = Math.min(b, sums[c] / cnt[c]);
+    tot += (b - a) / Math.max(a, b);
+  }
+  return tot / N;
+}
+
+const MODELS = [], SIL = [];
+for (let k = 1; k <= KMAX; k++) { MODELS[k] = fit(k); SIL[k] = silhouette(MODELS[k].labels, k); }
+const BEST_K = SIL.reduce((b, s, k) => (s != null && (b == null || s > SIL[b]) ? k : b), null);
+
+// ---------- Segment naming ----------
+const IDEAS = {
+  "Target": "Premium products, loyalty and VIP programs. The most valuable group.",
+  "Careful": "Quality-focused promotions and exclusive previews to get them spending.",
+  "Standard": "Regular seasonal offers. The largest group, so it is the backbone of sales.",
+  "Careless": "Trendy, low-cost products and buy-now offers.",
+  "Sensible": "Discounts, sales and value packs."
+};
+function segInfo(c) {
+  const I = c[0] > 70 ? "High" : c[0] < 40 ? "Low" : "Mid";
+  const S = c[1] > 60 ? "High" : c[1] < 40 ? "Low" : "Mid";
+  const named = { HighHigh: ["Target", "Rich and big spenders"], HighLow: ["Careful", "Rich but saving"], LowHigh: ["Careless", "Low income, high spend"], LowLow: ["Sensible", "Low income, low spend"], MidMid: ["Standard", "Average income and spend"] }[I + S];
+  if (named) return { name: named[0], desc: named[1], idea: IDEAS[named[0]] };
+  return { name: `${I} income · ${S} spend`, desc: "", idea: "" };
+}
+function names(model) {
+  const seen = {};
+  return model.C.map(c => {
+    const s = segInfo(c);
+    seen[s.name] = (seen[s.name] || 0) + 1;
+    return { ...s, label: seen[s.name] > 1 ? `${s.name} ${seen[s.name]}` : s.name };
+  });
+}
+
+// ---------- Helpers ----------
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const col = i => `var(--c${i % 10})`;
+const fmt1 = v => v.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+// ---------- Scatter plot ----------
+const P = { l: 50, r: 584, t: 14, b: 372, xMax: 140, yMax: 100 };
+const sx = v => P.l + (v / P.xMax) * (P.r - P.l);
+const sy = v => P.b - (v / P.yMax) * (P.b - P.t);
+const plot = $("plot");
+const region = el("image", { x: P.l, y: P.t, width: P.r - P.l, height: P.b - P.t, preserveAspectRatio: "none" }, plot);
+for (let v = 0; v <= 140; v += 20) { el("line", { class: "grid", x1: sx(v), x2: sx(v), y1: P.t, y2: P.b }, plot); el("text", { x: sx(v), y: P.b + 18, "text-anchor": "middle" }, plot).textContent = v; }
+for (let v = 0; v <= 100; v += 20) { el("line", { class: "grid", x1: P.l, x2: P.r, y1: sy(v), y2: sy(v) }, plot); el("text", { x: P.l - 8, y: sy(v) + 4, "text-anchor": "end" }, plot).textContent = v; }
+el("text", { class: "axis-title", x: (P.l + P.r) / 2, y: 410, "text-anchor": "middle" }, plot).textContent = "Annual Income (k$)";
+el("text", { class: "axis-title", x: 14, y: (P.t + P.b) / 2, "text-anchor": "middle", transform: `rotate(-90 14 ${(P.t + P.b) / 2})` }, plot).textContent = "Spending Score (1–100)";
+const ptLayer = el("g", {}, plot);
+const pts = X.map(p => { const c = el("circle", { class: "pt", cx: sx(p[0]), cy: sy(p[1]), r: 4.6 }, ptLayer); c.style.fill = "var(--muted)"; return c; });
+const predLayer = el("g", {}, plot);
+const centLayer = el("g", {}, plot);
+
+function drawRegions(C) {
+  const W = 280, H = 200, cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(W, H);
+  const rgb = C.map((c, j) => { const h = cssVar(`--c${j % 10}`); return [1, 3, 5].map(o => parseInt(h.substr(o, 2), 16)); });
+  const a = Math.round(parseFloat(cssVar("--region-alpha")) * 255);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const j = nearest([(x + .5) / W * P.xMax, (1 - (y + .5) / H) * P.yMax], C), o = (y * W + x) * 4;
+    img.data[o] = rgb[j][0]; img.data[o + 1] = rgb[j][1]; img.data[o + 2] = rgb[j][2]; img.data[o + 3] = a;
+  }
+  ctx.putImageData(img, 0, 0);
+  region.setAttribute("href", cv.toDataURL());
+}
+function drawCentroids(C) {
+  while (centLayer.children.length > C.length) centLayer.lastChild.remove();
+  C.forEach((c, j) => {
+    let g = centLayer.children[j];
+    if (!g) {
+      g = el("g", { class: "cent" }, centLayer);
+      el("path", { class: "halo", d: "M-7,-7L7,7M7,-7L-7,7" }, g);
+      el("path", { class: "core", d: "M-7,-7L7,7M7,-7L-7,7" }, g);
+    }
+    g.querySelector(".core").style.stroke = col(j);
+    g.style.transform = `translate(${sx(c[0])}px, ${sy(c[1])}px)`;
+  });
+}
+function colorPoints(labels) { pts.forEach((c, i) => c.style.fill = labels[i] < 0 ? "var(--muted)" : col(labels[i])); }
+
+// ---------- State & render ----------
+let K = BEST_K || 5;
+let model = MODELS[K];
+let running = false;
+
+function renderModel() {
+  colorPoints(model.labels);
+  drawCentroids(model.C);
+  drawRegions(model.C);
+  const sil = silhouette(model.labels, K);
+  $("s-wcss").textContent = fmt1(model.wcss);
+  $("s-sil").textContent = sil == null ? "n/a" : sil.toFixed(3);
+  const nm = names(model);
+  const counts = model.C.map((_, j) => model.labels.filter(l => l === j).length);
+  $("legend").innerHTML = nm.map((s, j) => `<div class="legend-row"><span class="chip" style="background:${col(j)}"></span><span>${s.label}${s.desc ? ` <span class="muted">· ${s.desc}</span>` : ""}</span><span class="mono muted">${counts[j]}</span></div>`).join("");
+  renderProfile(nm);
+  renderData(nm);
+  renderPredict();
+  document.querySelectorAll(".kbtn").forEach(b => b.setAttribute("aria-pressed", +b.dataset.k === K));
+}
+
+function renderProfile(nm) {
+  const rows = model.C.map((c, j) => {
+    const idx = model.labels.map((l, i) => l === j ? i : -1).filter(i => i >= 0);
+    const avg = f => idx.reduce((a, i) => a + RAW[i][f], 0) / idx.length;
+    const fem = idx.filter(i => RAW[i][0] === 0).length / idx.length * 100;
+    return `<tr><td><span class="seg"><span class="chip" style="background:${col(j)}"></span>${nm[j].label}</span></td><td class="num">${idx.length}</td><td class="num">${avg(1).toFixed(1)}</td><td class="num">${avg(2).toFixed(1)}</td><td class="num">${avg(3).toFixed(1)}</td><td class="num">${fem.toFixed(1)}</td><td class="idea">${nm[j].idea || "–"}</td></tr>`;
+  });
+  $("profile").innerHTML = rows.join("");
+  $("seg-sub").textContent = K === BEST_K
+    ? `With K = ${K}, each centroid lands in a clearly different income and spending zone, so every cluster gets a business name and a marketing plan.`
+    : `Showing K = ${K}. Choose K = ${BEST_K} for the recommended model, where each cluster gets a business name.`;
+}
+
+function renderData(nm) {
+  $("data").innerHTML = RAW.map((r, i) => `<tr><td class="num">${i + 1}</td><td>${r[0] ? "Male" : "Female"}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td><td><span class="seg"><span class="chip" style="background:${col(model.labels[i])}"></span>${nm[model.labels[i]].label}</span></td></tr>`).join("");
+}
+
+function renderPredict() {
+  const inc = +$("p-inc").value, sc = +$("p-sc").value;
+  $("o-inc").textContent = inc; $("o-sc").textContent = sc;
+  const j = nearest([inc, sc], model.C), c = model.C[j], s = names(model)[j];
+  $("v-name").innerHTML = `<span class="chip" style="background:${col(j)}"></span>${s.label}`;
+  $("v-detail").textContent = `Nearest centroid: income ${c[0].toFixed(1)}k$, score ${c[1].toFixed(1)}. Distance ${Math.sqrt(d2([inc, sc], c)).toFixed(1)}.`;
+  $("v-idea").textContent = s.idea ? `Marketing idea: ${s.idea}` : "";
+  predLayer.innerHTML = "";
+  el("line", { x1: sx(inc), y1: sy(sc), x2: sx(c[0]), y2: sy(c[1]), stroke: "var(--fg)", "stroke-width": 1.5, "stroke-dasharray": "4 4" }, predLayer);
+  const ring = el("circle", { cx: sx(inc), cy: sy(sc), r: 9, "stroke-width": 3, fill: "var(--surface)" }, predLayer);
+  ring.style.stroke = col(j);
+}
+
+function setK(k) {
+  if (running) return;
+  K = k; model = MODELS[k];
+  $("phase").textContent = `Showing the best of 10 k-means++ runs for K = ${k}.`;
+  renderModel();
+  drawCharts();
+}
+
+// ---------- Step-by-step animation ----------
+let runSeed = 1;
+async function watch() {
+  if (running) return;
+  running = true;
+  ["watch", "best"].forEach(id => $(id).disabled = true);
+  document.querySelectorAll(".kbtn").forEach(b => b.disabled = true);
+  const C0 = initRandom(K, mulberry32(1000 + runSeed++));
+  const run = lloyd(C0, true);
+  const wait = REDUCED ? 350 : 750;
+  predLayer.innerHTML = "";
+  colorPoints(new Array(N).fill(-1));
+  drawCentroids(C0);
+  drawRegions(C0);
+  $("phase").textContent = `Start: ${K} centroids placed on random customers.`;
+  await sleep(wait * 1.4);
+  for (const h of run.hist) {
+    if (h.phase === "assign") {
+      colorPoints(h.labels);
+      drawRegions(h.C);
+      $("phase").textContent = h.changed
+        ? `Iteration ${h.it} · E-step: each customer joins its nearest centroid.`
+        : `Iteration ${h.it} · No customer changed cluster, so the algorithm has converged.`;
+    } else {
+      drawCentroids(h.C);
+      drawRegions(h.C);
+      $("phase").textContent = `Iteration ${h.it} · M-step: each centroid moves to the mean of its customers.`;
+    }
+    await sleep(wait);
+  }
+  const diff = run.wcss - MODELS[K].wcss;
+  $("phase").textContent = `Done in ${run.iters} iterations. This run's WCSS is ${fmt1(run.wcss)}` +
+    (diff > 1 ? `, worse than the best run (${fmt1(MODELS[K].wcss)}). It got stuck in a local minimum, which is why we restart 10 times.` : `, the same as the best run.`);
+  model = sortModel(run);
+  running = false;
+  ["watch", "best"].forEach(id => $(id).disabled = false);
+  document.querySelectorAll(".kbtn").forEach(b => b.disabled = false);
+  renderModel();
+}
+
+// ---------- Elbow & silhouette charts ----------
+function lineChart(svg, ys, { yMin, yMax, ticks, fmt, kFrom }) {
+  svg.innerHTML = "";
+  const L = 52, R = 326, T = 12, B = 182;
+  const x = k => L + (k - 1) / (KMAX - 1) * (R - L);
+  const y = v => B - (v - yMin) / (yMax - yMin) * (B - T);
+  ticks.forEach(v => { el("line", { class: "grid", x1: L, x2: R, y1: y(v), y2: y(v) }, svg); el("text", { x: L - 6, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = fmt(v); });
+  for (let k = 1; k <= KMAX; k++) el("text", { x: x(k), y: B + 16, "text-anchor": "middle" }, svg).textContent = k;
+  el("text", { class: "axis-title", x: (L + R) / 2, y: 214, "text-anchor": "middle" }, svg).textContent = "Number of clusters (K)";
+  el("line", { x1: x(BEST_K), x2: x(BEST_K), y1: T, y2: B, stroke: "var(--accent)", "stroke-dasharray": "4 4", "stroke-width": 1.5 }, svg);
+  const ks = []; for (let k = kFrom; k <= KMAX; k++) ks.push(k);
+  el("polyline", { points: ks.map(k => `${x(k)},${y(ys[k])}`).join(" "), fill: "none", stroke: "var(--fg)", "stroke-width": 2 }, svg);
+  ks.forEach(k => {
+    const g = el("g", { class: "kpt", tabindex: 0, role: "button", "aria-label": `Load K = ${k}` }, svg);
+    el("circle", { cx: x(k), cy: y(ys[k]), r: 12, fill: "transparent" }, g);
+    el("circle", { cx: x(k), cy: y(ys[k]), r: k === K ? 6.5 : 4.5, fill: k === K ? "var(--accent)" : "var(--surface)", stroke: k === K ? "var(--accent)" : "var(--fg)", "stroke-width": 2 }, g);
+    g.addEventListener("click", () => setK(k));
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setK(k); } });
+  });
+}
+function drawCharts() {
+  const W = MODELS.map(m => m && m.wcss);
+  lineChart($("elbow"), W, { yMin: 0, yMax: 300000, ticks: [0, 100000, 200000, 300000], fmt: v => v ? `${v / 1000}k` : "0", kFrom: 1 });
+  lineChart($("silch"), SIL, { yMin: 0.2, yMax: 0.6, ticks: [0.2, 0.3, 0.4, 0.5, 0.6], fmt: v => v.toFixed(1), kFrom: 2 });
+}
+
+// ---------- Wire up ----------
+const kg = $("kgroup");
+for (let k = 2; k <= KMAX; k++) {
+  const b = document.createElement("button");
+  b.className = "kbtn"; b.id = `k${k}`; b.dataset.k = k; b.textContent = k;
+  b.addEventListener("click", () => setK(k));
+  kg.appendChild(b);
+}
+$("watch").addEventListener("click", watch);
+$("best").addEventListener("click", () => setK(K));
+$("p-inc").addEventListener("input", renderPredict);
+$("p-sc").addEventListener("input", renderPredict);
+
+$("elbow-note").innerHTML = `WCSS drops steeply up to <b>K = ${BEST_K}</b> and only slowly after it. That bend is the "elbow". K = ${BEST_K} also has the highest silhouette score (<b>${SIL[BEST_K].toFixed(3)}</b>), so both methods agree on <b>${BEST_K} clusters</b>.`;
+
+const reTheme = () => drawRegions(model.C);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", reTheme);
+new MutationObserver(reTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+renderModel();
+drawCharts();
+</script>
+
+</body></html>
